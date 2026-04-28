@@ -11,7 +11,7 @@ import 'screens/home_screen.dart';
 import 'screens/tenants_screen.dart';
 import 'screens/tenant_details_screen.dart';
 import 'screens/units_screen.dart';
-import 'screens/add_unit_screen.dart';
+//import 'screens/add_unit_screen.dart';
 import 'screens/messages_screen.dart';
 import 'screens/profile_screen.dart';
 
@@ -47,7 +47,7 @@ class MyApp extends StatelessWidget {
           '/tenants': (context) => TenantsScreen(),
           '/tenant-details': (context) => TenantDetailsScreen(),
           '/units': (context) => UnitsScreen(),
-          '/add-unit': (context) => AddUnitScreen(),
+          //'/units': (context) => UnitsScreen(),
           '/messages': (context) => MessagesScreen(),
           '/profile': (context) => ProfileScreen(),
         },

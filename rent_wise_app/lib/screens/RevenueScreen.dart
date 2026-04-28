@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rentwise_app/stateless%20widgets/BottomNav.dart';
+//import 'package:rentwise_app/stateless%20widgets/BottomNav.dart';
 import 'package:rentwise_app/stateless%20widgets/FinancialItem.dart';
 import 'package:rentwise_app/stateless%20widgets/Header.dart';
 import 'package:rentwise_app/stateless%20widgets/ApartmentTabs.dart';
@@ -13,7 +13,7 @@ class RevenueScreen extends StatefulWidget {
 
 class _RevenueScreenState extends State<RevenueScreen> {
   int _selectedApartment = 0;
-  int _selectedTab = 3; // Revenue tab active by default
+  //int _selectedTab = 3; // Revenue tab active by default
 
   static const _items = [
     FinancialItem(
@@ -71,9 +71,6 @@ class _RevenueScreenState extends State<RevenueScreen> {
             ),
 
             // ── Bottom navigation ─────────────────────────────
-            BottomNav(
-                currentIndex: _selectedTab,
-                onTap: (i) => setState(() => _selectedTab = i))
           ],
         ),
       ),

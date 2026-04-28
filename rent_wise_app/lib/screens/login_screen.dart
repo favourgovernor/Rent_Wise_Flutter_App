@@ -38,13 +38,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: Colors.blue.shade900)),
-              SizedBox(height: 40),
+              SizedBox(height: 10),
               TextField(
                 controller: _emailController,
                 decoration: InputDecoration(
                     labelText: 'Email', border: OutlineInputBorder()),
               ),
-              SizedBox(height: 16),
+              SizedBox(height: 5),
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 30),
+              SizedBox(height: 5),
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleLogin,
                 child: _isLoading ? CircularProgressIndicator() : Text('Login'),

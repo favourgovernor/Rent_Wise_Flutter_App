@@ -68,7 +68,7 @@ class _HomeContentState extends State<HomeContent> {
         children: [
           // ── Header ───────────────────────────────────────────────
           Header(),
-          const SizedBox(height: 5),
+          const SizedBox(height: 15),
           // ── Tab row ──────────────────────────────────────────────
           ApartmentTabs(
             tabs: _tabs,
@@ -81,7 +81,7 @@ class _HomeContentState extends State<HomeContent> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
               decoration: BoxDecoration(
                 color: const Color(0xFFD6F5F5),
                 borderRadius: BorderRadius.circular(16),
@@ -89,12 +89,12 @@ class _HomeContentState extends State<HomeContent> {
               child: Column(
                 children: [
                   StatRow(label: 'Occupancy', value: data['occupancy']! / 100),
+                  SizedBox(height: 20),
                   StatRow(label: 'Revenue', value: data['revenue']! / 100),
                 ],
               ),
             ),
           ),
-
           const Spacer(),
         ],
       ),

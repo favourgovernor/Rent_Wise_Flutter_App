@@ -16,7 +16,7 @@ class _TenantsScreenState extends State<TenantsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _selectedTab = 0;
-  final List<String> _tabs = ['ADD', 'VIEW'];
+  final List<String> _tabs = ['Apartment 1', 'Apartment 2', 'Apartment 3'];
 
   @override
   void initState() {
@@ -39,11 +39,13 @@ class _TenantsScreenState extends State<TenantsScreen>
           children: [
             // 👉 REMOVE if not created yet OR import properly
             Header(),
+            SizedBox(height: 12),
             ApartmentTabs(
               tabs: _tabs,
               selectedIndex: _selectedTab,
               onTabSelected: (i) => setState(() => _selectedTab = i),
             ),
+            SizedBox(height: 20),
             TabBar(
               controller: _tabController,
               indicatorColor: Colors.blue.shade900,
