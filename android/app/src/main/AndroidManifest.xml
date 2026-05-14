@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="rent_wise_app"
+        android:label="rentwise_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
