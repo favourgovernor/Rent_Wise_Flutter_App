@@ -5,7 +5,7 @@ class AnimatedBg extends StatelessWidget {
   final Animation<double> animation;
   final Size size;
 
-  const AnimatedBg({required this.animation, required this.size});
+  const AnimatedBg({super.key, required this.animation, required this.size});
 
   @override
   Widget build(BuildContext context) {
@@ -63,5 +63,5 @@ class AnimatedBg extends StatelessWidget {
 }
 
 class _C {
-  static get teal => null;
+  static const Color teal = Colors.teal;
 }

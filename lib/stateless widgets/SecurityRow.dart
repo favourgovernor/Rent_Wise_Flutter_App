@@ -7,6 +7,7 @@ class SecurityRow extends StatelessWidget {
   final Color? color;
 
   const SecurityRow({
+    super.key,
     required this.icon,
     required this.text,
     this.color = _C.tealDark,

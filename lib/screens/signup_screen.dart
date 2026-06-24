@@ -1,515 +1,331 @@
+// lib/screens/auth/signup_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/rentwise_colors.dart';
-import '../widgets/section_card.dart';
-import '../widgets/form_field_widget.dart';
-import '../widgets/field_label.dart';
-import '../widgets/role_selector.dart';
-import '../widgets/apartment_tabs_preview.dart';
-import '../widgets/apart_name_field.dart';
-import '../widgets/password_strength.dart';
-
-// If ApartmentTabs lives in its own file, import it too:
-// import '../widgets/apartment_tabs.dart';
+import 'package:rentwise_app/screens/auth/auth_widgets.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
-
   @override
   State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen>
-    with TickerProviderStateMixin {
-  // ── Form key ──
-  final _formKey = GlobalKey<FormState>();
-  final _scrollCtrl = ScrollController();
+class _SignupScreenState extends State<SignupScreen> {
+  final _form = GlobalKey<FormState>();
 
-  // ── Text controllers ──
+  // Focus nodes — one per field, in tab order
+  final _nameFN = FocusNode();
+  final _emailFN = FocusNode();
+  final _phoneFN = FocusNode();
+  final _passFN = FocusNode();
+  final _cpassFN = FocusNode();
+
+  // Controllers
   final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _numApartCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _cpassCtrl = TextEditingController();
 
-  // ── UI state ──
-  String _role = 'Landlord';
-  bool _obscurePass = true;
-  bool _obscureConfirm = true;
-  bool _isLoading = false;
-  bool _showApartNames = false;
-
-  // ── Apartment state ──
-  int _selectedTab = 0;
-  List<String> _apartmentNames = [];
-  List<TextEditingController> _apartNameCtrls = [];
-
-  // ── Fade animation ──
-  late AnimationController _fadeCtrl;
-  late Animation<double> _fadeAnim;
-
-  static const List<String> _roles = [
-    'Landlord',
-    'Caretaker',
-    'Property Manager',
-  ];
-
-  // ────────────────────────────────────────────
-  @override
-  void initState() {
-    super.initState();
-
-    _fadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _fadeCtrl.forward();
-
-    _numApartCtrl.addListener(_onApartCountChanged);
-
-    // Rebuild when password changes so strength bar updates live
-    _passwordCtrl.addListener(() => setState(() {}));
-  }
-
-  // ── Sync apartment list length with the number field ──
-  void _onApartCountChanged() {
-    final raw = int.tryParse(_numApartCtrl.text.trim()) ?? 0;
-    final count = raw.clamp(0, 50);
-    if (count == _apartmentNames.length) return;
-
-    setState(() {
-      if (count > _apartmentNames.length) {
-        while (_apartmentNames.length < count) {
-          final idx = _apartmentNames.length + 1;
-          _apartmentNames.add('Apartment $idx');
-          _apartNameCtrls.add(TextEditingController(text: 'Apartment $idx'));
-        }
-      } else {
-        while (_apartmentNames.length > count) {
-          _apartNameCtrls.last.dispose();
-          _apartNameCtrls.removeLast();
-          _apartmentNames.removeLast();
-        }
-        if (_selectedTab >= count && count > 0) {
-          _selectedTab = count - 1;
-        } else if (count == 0) {
-          _selectedTab = 0;
-        }
-      }
-    });
-  }
-
-  // ── Push renamed value back into the tabs list ──
-  void _syncApartmentName(int index) {
-    if (index >= _apartNameCtrls.length) return;
-    final val = _apartNameCtrls[index].text.trim();
-    setState(() {
-      _apartmentNames[index] = val.isEmpty ? 'Apartment ${index + 1}' : val;
-    });
-  }
-
-  // ── Submit ──
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    // TODO: replace the line above with:
-    // await context.read<AuthProvider>().signup(...)
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    Navigator.pushReplacementNamed(context, '/verify-otp');
-  }
+  bool _hidePass = true;
+  bool _hideCPass = true;
+  bool _loading = false;
+  String? _error;
 
   @override
   void dispose() {
-    _fadeCtrl.dispose();
-    _scrollCtrl.dispose();
+    _nameFN.dispose();
+    _emailFN.dispose();
+    _phoneFN.dispose();
+    _passFN.dispose();
+    _cpassFN.dispose();
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _emailCtrl.dispose();
-    _numApartCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
-    for (final c in _apartNameCtrls) {
-      c.dispose();
-    }
+    _phoneCtrl.dispose();
+    _passCtrl.dispose();
+    _cpassCtrl.dispose();
     super.dispose();
   }
 
-  // ────────────────────────────────────────────
+  // ─────────────────────────────────────────
+  //  SUBMIT
+  //
+  //  1. signUp()       — creates the account
+  //  2. signInWithOtp  — sends the 6-digit code
+  //
+  //  Phone number is passed to OTP screen args
+  //  so SetupScreen can pre-fill it.
+  // ─────────────────────────────────────────
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    if (!_form.currentState!.validate()) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final name = _nameCtrl.text.trim();
+      final email = _emailCtrl.text.trim();
+      final phone = _phoneCtrl.text.trim();
+      final password = _passCtrl.text;
+
+      // Step 1 — Create the Supabase account
+      try {
+        await Supabase.instance.client.auth.signUp(
+          email: email,
+          password: password,
+          data: {
+            'full_name': name,
+            'phone': phone,
+          },
+        );
+      } on AuthException catch (e) {
+        // Account already exists — still send OTP below
+        if (!e.message.toLowerCase().contains('already registered') &&
+            !e.message.toLowerCase().contains('already exists')) {
+          rethrow;
+        }
+      }
+
+      if (!mounted) return;
+
+      // Step 2 — Send 6-digit OTP via signInWithOtp
+      // This is reliable regardless of dashboard settings
+      await Supabase.instance.client.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: false,
+      );
+
+      if (!mounted) return;
+      setState(() => _loading = false);
+
+      // Navigate to OTP screen — pass all details
+      Navigator.pushReplacementNamed(
+        context,
+        '/otp',
+        arguments: {
+          'email': email,
+          'name': name,
+          'phone': phone, // ← passed so SetupScreen can pre-fill
+          'password': password,
+          'isLogin': false,
+        },
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = _friendly(e.message);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Something went wrong. Please try again.';
+      });
+      debugPrint('Signup error: $e');
+    }
+  }
+
+  String _friendly(String raw) {
+    final m = raw.toLowerCase();
+    if (m.contains('already registered') || m.contains('already exists')) {
+      return 'An account with this email already exists.\nPlease sign in instead.';
+    }
+    if (m.contains('weak') || m.contains('password')) {
+      return 'Password must be at least 6 characters.';
+    }
+    if (m.contains('email')) {
+      return 'Please enter a valid email address.';
+    }
+    return raw;
+  }
+
+  // ─────────────────────────────────────────
+  //  BUILD
+  // ─────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: RentWiseColors.bg,
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: CustomScrollView(
-          controller: _scrollCtrl,
-          slivers: [
-            // ══════════════════════════════════
-            // APP BAR
-            // ══════════════════════════════════
-            SliverAppBar(
-              expandedHeight: 140,
-              pinned: true,
-              backgroundColor: RentWiseColors.primary,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white, size: 18),
-                onPressed: () => Navigator.pop(context),
-              ),
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF0E2233), Color(0xFF1A3C5E)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+      backgroundColor: const Color(0xFF0E2233),
+      resizeToAvoidBottomInset: true,
+      body: Column(
+        children: [
+          // ── Dark header ──────────────────
+          const AuthHeader(
+            title: 'Create Account',
+            subtitle: 'Sign up and start managing\nyour properties',
+          ),
+
+          // ── White scrollable form ────────
+          AuthCard(
+            child: Form(
+              key: _form,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Full name ────────────
+                  const AuthLabel('Full Name'),
+                  AuthField(
+                    controller: _nameCtrl,
+                    focusNode: _nameFN,
+                    hint: 'e.g. John Kamau',
+                    icon: Icons.person_outline_rounded,
+                    action: TextInputAction.next,
+                    onNext: () => FocusScope.of(context).requestFocus(_emailFN),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Full name is required'
+                        : null,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 70, 24, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          'Create Account',
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          'Register and start managing your property.',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: Colors.white70),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 16),
+
+                  // ── Email ────────────────
+                  const AuthLabel('Email Address'),
+                  AuthField(
+                    controller: _emailCtrl,
+                    focusNode: _emailFN,
+                    hint: 'you@example.com',
+                    icon: Icons.email_outlined,
+                    keyboard: TextInputType.emailAddress,
+                    action: TextInputAction.next,
+                    onNext: () => FocusScope.of(context).requestFocus(_phoneFN),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Email is required';
+                      }
+                      if (!RegExp(r'^[\w.+\-]+@[\w\-]+\.\w{2,}$')
+                          .hasMatch(v.trim())) {
+                        return 'Enter a valid email address';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-              ),
-            ),
+                  const SizedBox(height: 16),
 
-            // ══════════════════════════════════
-            // FORM BODY
-            // ══════════════════════════════════
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── 1. Personal Information ──────────────
-                      SectionCard(
-                        icon: Icons.person_outline_rounded,
-                        title: 'Personal Information',
-                        children: [
-                          FormFieldWidget(
-                            controller: _nameCtrl,
-                            label: 'Full Name',
-                            hint: 'e.g. John Kamau',
-                            icon: Icons.badge_outlined,
-                            validator: (v) =>
-                                (v == null || v.trim().isEmpty) ? 'Name' : null,
-                          ),
-                          const SizedBox(height: 14),
-                          FormFieldWidget(
-                            controller: _phoneCtrl,
-                            label: 'Phone Number',
-                            hint: '07XX XXX XXX',
-                            icon: Icons.phone_outlined,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(10),
-                            ],
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
-                                return 'Phone Number';
-                              }
-                              if (v.trim().length < 9) {
-                                return 'Invalid Phone Number';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          FormFieldWidget(
-                            controller: _emailCtrl,
-                            label: 'Email Address (optional)',
-                            hint: 'john@example.com',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (v) {
-                              if (v != null && v.isNotEmpty) {
-                                final ok = RegExp(r'^[\w.-]+@[\w.-]+\.\w+$')
-                                    .hasMatch(v);
-                                if (!ok) return 'Invalid Email Address';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── 2. Role ──────────────────────────────
-                      SectionCard(
-                        icon: Icons.work_outline_rounded,
-                        title: 'Your Role',
-                        children: [
-                          const FieldLabel('Select Role'),
-                          const SizedBox(height: 8),
-                          RoleSelector(
-                            roles: _roles,
-                            selected: _role,
-                            onChanged: (r) => setState(() => _role = r),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── 3. Property Details ──────────────────
-                      SectionCard(
-                        icon: Icons.home_work_outlined,
-                        title: 'Property Details',
-                        children: [
-                          FormFieldWidget(
-                            controller: _numApartCtrl,
-                            label: 'Number of Apartments',
-                            hint: 'e.g. 3',
-                            icon: Icons.apartment_outlined,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(2),
-                            ],
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
-                                return 'Number of Apartments is required';
-                              }
-                              final n = int.tryParse(v);
-                              if (n == null || n < 1) {
-                                return 'Please enter a valid number (1+)';
-                              }
-                              return null;
-                            },
-                          ),
-
-                          // Live tab preview
-                          if (_apartmentNames.isNotEmpty) ...[
-                            const SizedBox(height: 18),
-                            const FieldLabel('Preview — Apartment Tabs'),
-                            const SizedBox(height: 8),
-                            ApartmentTabsPreview(
-                              tabs: _apartmentNames,
-                              selectedIndex: _selectedTab,
-                              onTabSelected: (i) =>
-                                  setState(() => _selectedTab = i),
-                            ),
-                          ],
-
-                          // Optional apartment naming
-                          if (_apartmentNames.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            GestureDetector(
-                              onTap: () => setState(
-                                  () => _showApartNames = !_showApartNames),
-                              child: Row(
-                                children: [
-                                  AnimatedRotation(
-                                    turns: _showApartNames ? 0.25 : 0,
-                                    duration: const Duration(milliseconds: 250),
-                                    child: const Icon(
-                                        Icons.chevron_right_rounded,
-                                        color: RentWiseColors.accent,
-                                        size: 20),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Name your apartments (optional)',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: RentWiseColors.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              child: _showApartNames
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: Column(
-                                        children: List.generate(
-                                          _apartmentNames.length,
-                                          (i) => Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 10),
-                                            child: ApartNameField(
-                                              index: i,
-                                              controller: _apartNameCtrls[i],
-                                              onChanged: (_) =>
-                                                  _syncApartmentName(i),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── 4. Security ──────────────────────────
-                      SectionCard(
-                        icon: Icons.lock_outline_rounded,
-                        title: 'Security',
-                        children: [
-                          FormFieldWidget(
-                            controller: _passwordCtrl,
-                            label: 'Password',
-                            hint: 'Min 8 characters',
-                            icon: Icons.lock_outlined,
-                            obscureText: _obscurePass,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePass
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                color: RentWiseColors.textMid,
-                                size: 18,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _obscurePass = !_obscurePass),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) {
-                                return 'Password required';
-                              }
-                              if (v.length < 8) {
-                                return 'Password must be at least 8 characters';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          PasswordStrength(password: _passwordCtrl.text),
-                          const SizedBox(height: 14),
-                          FormFieldWidget(
-                            controller: _confirmCtrl,
-                            label: 'Confirm Password',
-                            hint: 'Repeat password',
-                            icon: Icons.lock_reset_outlined,
-                            obscureText: _obscureConfirm,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscureConfirm
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                color: RentWiseColors.textMid,
-                                size: 18,
-                              ),
-                              onPressed: () => setState(
-                                  () => _obscureConfirm = !_obscureConfirm),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) {
-                                return 'Confirm password is required';
-                              }
-                              if (v != _passwordCtrl.text) {
-                                return 'Passwords do not match';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-
-                      // ── Submit button ────────────────────────
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: RentWiseColors.primary,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor:
-                                RentWiseColors.primary.withOpacity(0.6),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 3,
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : Text(
-                                  'Create Account  →',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── Login redirect ───────────────────────
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Already have an account? ',
-                            style: GoogleFonts.poppins(
-                                fontSize: 13, color: RentWiseColors.textMid),
-                          ),
-                          GestureDetector(
-                            onTap: () => Navigator.pushReplacementNamed(
-                                context, '/login'),
-                            child: Text(
-                              'Sign In',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: RentWiseColors.accent,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
+                  // ── Phone number ─────────
+                  const AuthLabel('Phone Number'),
+                  AuthField(
+                    controller: _phoneCtrl,
+                    focusNode: _phoneFN,
+                    hint: '07XX XXX XXX',
+                    icon: Icons.phone_outlined,
+                    keyboard: TextInputType.phone,
+                    action: TextInputAction.next,
+                    formatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
                     ],
+                    onNext: () => FocusScope.of(context).requestFocus(_passFN),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Phone number is required';
+                      }
+                      if (v.trim().length < 9) {
+                        return 'Enter a valid Kenyan phone number';
+                      }
+                      return null;
+                    },
                   ),
-                ),
+                  const SizedBox(height: 16),
+
+                  // ── Divider ──────────────
+                  Row(children: [
+                    const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('Security',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: const Color(0xFF9CA3AF),
+                              fontWeight: FontWeight.w500)),
+                    ),
+                    const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                  ]),
+                  const SizedBox(height: 16),
+
+                  // ── Password ─────────────
+                  const AuthLabel('Password'),
+                  AuthPasswordField(
+                    controller: _passCtrl,
+                    focusNode: _passFN,
+                    hint: 'Minimum 6 characters',
+                    obscure: _hidePass,
+                    onToggle: () => setState(() => _hidePass = !_hidePass),
+                    action: TextInputAction.next,
+                    onNext: () => FocusScope.of(context).requestFocus(_cpassFN),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Password is required';
+                      }
+                      if (v.length < 6) {
+                        return 'At least 6 characters required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Confirm password ─────
+                  const AuthLabel('Confirm Password'),
+                  AuthPasswordField(
+                    controller: _cpassCtrl,
+                    focusNode: _cpassFN,
+                    hint: 'Re-enter your password',
+                    obscure: _hideCPass,
+                    onToggle: () => setState(() => _hideCPass = !_hideCPass),
+                    action: TextInputAction.done,
+                    onNext: _submit,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (v != _passCtrl.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── OTP info note ─────────
+                  const AuthInfo(
+                    'A 6-digit verification code will be '
+                    'sent to your email after you tap '
+                    'Create Account.',
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Error ─────────────────
+                  if (_error != null) ...[
+                    AuthError(_error!),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // ── Submit button ─────────
+                  AuthButton(
+                    label: 'Create Account',
+                    loading: _loading,
+                    onTap: _submit,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Sign in link ──────────
+                  AuthBottomLink(
+                    question: 'Already have an account?',
+                    action: 'Sign In',
+                    onTap: () =>
+                        Navigator.pushReplacementNamed(context, '/login'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

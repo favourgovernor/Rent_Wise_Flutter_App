@@ -1,4 +1,4 @@
-import 'dart:convert';  // ← ADD THIS IMPORT
+import 'dart:convert'; // ← ADD THIS IMPORT
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
@@ -6,11 +6,11 @@ import '../services/api_service.dart';
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
   final FlutterSecureStorage _storage = FlutterSecureStorage();
-  
+
   bool _isLoading = false;
   String? _token;
   Map<String, dynamic>? _user;
-  
+
   bool get isLoading => _isLoading;
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
@@ -35,14 +35,14 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final response = await _apiService.login(email, password);
-      
+
       if (response['success']) {
         _token = response['token'];
         _user = response['user'];
-        
+
         await _storage.write(key: 'auth_token', value: _token);
         await _storage.write(key: 'user_data', value: jsonEncode(_user));
-        
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -50,7 +50,7 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       print('Login error: $e');
     }
-    
+
     _isLoading = false;
     notifyListeners();
     return false;

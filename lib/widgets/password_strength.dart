@@ -74,7 +74,7 @@ class PasswordStrength extends StatelessWidget {
         if (_label.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
-            'Nguvu ya password: $_label',
+            'password strength: $_label',
             style: GoogleFonts.poppins(fontSize: 11, color: _color),
           ),
         ],
